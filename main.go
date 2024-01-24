@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"os"
@@ -20,6 +21,10 @@ func main() {
 		User:         "spraints",
 		Token:        os.Getenv("GITHUB_TOKEN"),
 		ShowProgress: false,
+	}
+
+	if opts.Token == "" {
+		opts.Token = tryReadDotGitHubToken()
 	}
 
 	for _, arg := range os.Args[1:] {
@@ -136,4 +141,25 @@ type progress struct{}
 func (progress) Write(msg []byte) (int, error) {
 	log.Printf("progress: %q", string(msg))
 	return len(msg), nil
+}
+
+func tryReadDotGitHubToken() string {
+	data, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".github-token"))
+	if err != nil {
+		return ""
+	}
+
+	const prefix = "GITHUB_TOKEN="
+	i := bytes.Index(data, []byte(prefix))
+	if i == -1 {
+		return ""
+	}
+
+	data = data[i+len(prefix):]
+
+	if i := bytes.IndexRune(data, '\n'); i != -1 {
+		data = data[:i]
+	}
+
+	return string(data)
 }
