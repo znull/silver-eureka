@@ -11,6 +11,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/transport/client"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 )
 
@@ -32,6 +33,12 @@ func main() {
 		if arg == "-p" || arg == "--progress" {
 			log.Printf("showing progress")
 			opts.ShowProgress = true
+		} else if arg == "-v" || arg == "--verbose" {
+			log.Printf("showing progress")
+			opts.ShowProgress = true
+			c := http.NewClient(newVerboseHTTPClient())
+			client.InstallProtocol("https", c)
+			client.InstallProtocol("http", c)
 		} else if arg == "-r" || arg == "--review-lab" {
 			opts.URL = "https://spraints.review-lab.github.com/spraints/silver-eureka"
 		} else if arg == "-g" || arg == "--garage" {
