@@ -24,6 +24,10 @@ func main() {
 		ShowProgress: false,
 	}
 
+	if opts.Token == "" {
+		opts.Token = tryReadDotGitHubToken()
+	}
+
 	var skip int
 	for i, arg := range os.Args[1:] {
 		if skip > 0 {
@@ -160,4 +164,25 @@ func (progress) Write(msg []byte) (int, error) {
 
 	log.Printf("progress:\n%s", msg)
 	return len(msg), nil
+}
+
+func tryReadDotGitHubToken() string {
+	data, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".github-token"))
+	if err != nil {
+		return ""
+	}
+
+	const prefix = "GITHUB_TOKEN="
+	i := bytes.Index(data, []byte(prefix))
+	if i == -1 {
+		return ""
+	}
+
+	data = data[i+len(prefix):]
+
+	if i := bytes.IndexRune(data, '\n'); i != -1 {
+		data = data[:i]
+	}
+
+	return string(data)
 }
