@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"os"
@@ -22,12 +23,22 @@ func main() {
 		ShowProgress: false,
 	}
 
-	for _, arg := range os.Args[1:] {
+	var skip int
+	for i, arg := range os.Args[1:] {
+		if skip > 0 {
+			skip--
+			continue
+		}
 		if arg == "-p" || arg == "--progress" {
 			log.Printf("showing progress")
 			opts.ShowProgress = true
 		} else if arg == "-r" || arg == "--review-lab" {
 			opts.URL = "https://spraints.review-lab.github.com/spraints/silver-eureka"
+		} else if arg == "-g" || arg == "--garage" {
+			opts.URL = "https://garage.github.com/spraints/silver-eureka"
+		} else if arg == "-u" || arg == "--url" {
+			opts.URL = os.Args[i+2]
+			skip = 1
 		} else {
 			log.Fatalf("illegal arg %q", arg)
 		}
@@ -57,8 +68,13 @@ func mainImpl(opts options) error {
 
 	repoPath := filepath.Join(tmpdir, "testing")
 
+	auth := &http.BasicAuth{
+		Username: opts.User,
+		Password: opts.Token,
+	}
+
 	log.Printf("cloning %s to %q", opts.URL, repoPath)
-	r, err := git.PlainClone(repoPath, false, &git.CloneOptions{URL: opts.URL})
+	r, err := git.PlainClone(repoPath, false, &git.CloneOptions{URL: opts.URL, Auth: auth})
 	if err != nil {
 		return fmt.Errorf("clone error: %w", err)
 	}
@@ -115,10 +131,7 @@ func mainImpl(opts options) error {
 		RefSpecs: []config.RefSpec{
 			config.RefSpec(commitHash.String() + ":refs/heads/" + opts.Branch),
 		},
-		Auth: &http.BasicAuth{
-			Username: opts.User,
-			Password: opts.Token,
-		},
+		Auth: auth,
 	}
 	if opts.ShowProgress {
 		pushOpts.Progress = &progress{}
@@ -134,6 +147,10 @@ func mainImpl(opts options) error {
 type progress struct{}
 
 func (progress) Write(msg []byte) (int, error) {
-	log.Printf("progress: %q", string(msg))
+	if bytes.Equal(msg, []byte{0}) {
+		return 1, nil
+	}
+
+	log.Printf("progress:\n%s", msg)
 	return len(msg), nil
 }
