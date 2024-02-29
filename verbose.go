@@ -26,25 +26,14 @@ func (t *verboseHTTPTransport) RoundTrip(req *http.Request) (*http.Response, err
 	n := atomic.AddInt32(&t.count, 1)
 	tag := fmt.Sprintf("%d", n)
 
+	reqStr, err := httputil.DumpRequestOut(req, false)
+	if err != nil {
+		return nil, err
+	}
+
+	vPrintf(tag, "sending request to %v\n%s", req.URL, reqStr)
 	if req.Body != nil {
-		reqBody, err := io.ReadAll(req.Body)
-		if err != nil {
-			return nil, err
-		}
-		req.Body.Close()
-		req.Body = io.NopCloser(bytes.NewReader(reqBody))
-		reqStr, err := httputil.DumpRequestOut(req, true)
-		if err != nil {
-			return nil, err
-		}
-		vPrintf(tag, "sending request to %v\n%s", req.URL, reqStr)
-		req.Body = io.NopCloser(bytes.NewReader(reqBody))
-	} else {
-		reqStr, err := httputil.DumpRequestOut(req, false)
-		if err != nil {
-			return nil, err
-		}
-		vPrintf(tag, "sending request to %v\n%s", req.URL, reqStr)
+		req.Body = &verboseHTTPBody{tag: tag + "/request", body: req.Body}
 	}
 
 	resp, err := http.DefaultTransport.RoundTrip(req)
@@ -55,7 +44,7 @@ func (t *verboseHTTPTransport) RoundTrip(req *http.Request) (*http.Response, err
 
 	respStr, _ := httputil.DumpResponse(resp, false)
 	vPrintf(tag, "received %d response from %v\n%s", resp.StatusCode, req.URL, respStr)
-	resp.Body = &verboseHTTPBody{tag: tag, body: resp.Body}
+	resp.Body = &verboseHTTPBody{tag: tag + "/response", body: resp.Body}
 
 	return resp, nil
 }
@@ -106,9 +95,9 @@ func (pr *verbosePacketReader) Flush(tag string) {
 	defer pr.l.Unlock()
 	switch {
 	case pr.finished && pr.countAfterFinish > 0:
-		vPrintf(tag, "received %d unprocessed bytes", pr.countAfterFinish)
+		vPrintf(tag, "%d unprocessed bytes after PACK or error", pr.countAfterFinish)
 	case !pr.finished && len(pr.buf) > 0:
-		vPrintf(tag, "received %d unprocessable bytes", len(pr.buf))
+		vPrintf(tag, "%d bytes of incomplete pktline", len(pr.buf))
 	}
 	if pr.sidebands != nil {
 		for i, sb := range pr.sidebands {
@@ -126,13 +115,13 @@ func (pr *verbosePacketReader) flush(tag string) {
 		sizeField := pr.buf[:4]
 
 		if bytes.Equal(sizeField, []byte("0000")) {
-			vPrintf(tag, "received flush packet")
+			vPrintf(tag, "flush packet")
 			pr.buf = pr.buf[4:]
 			continue
 		}
 
 		if bytes.Equal(sizeField, []byte("PACK")) {
-			vPrintf(tag, "start of pack")
+			vPrintf(tag, "PACK")
 			pr.finished = true
 			pr.countAfterFinish += len(pr.buf) - 4
 			pr.buf = nil
@@ -162,7 +151,7 @@ func (pr *verbosePacketReader) flush(tag string) {
 			sb := pr.getSideband(sbi)
 			sb.Push(fmt.Sprintf("%s/sideband-%d", tag, sbi), data[1:])
 		default:
-			vPrintf(tag, "received %d bytes from server: %q", size, string(data))
+			vPrintf(tag, "%04X: %q", size, string(data))
 		}
 	}
 }
