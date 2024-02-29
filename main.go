@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	nethttp "net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -28,7 +29,10 @@ func main() {
 		opts.Token = tryReadDotGitHubToken()
 	}
 
-	var skip int
+	var (
+		skip int
+		rt   nethttp.RoundTripper
+	)
 	for i, arg := range os.Args[1:] {
 		if skip > 0 {
 			skip--
@@ -38,11 +42,9 @@ func main() {
 			log.Printf("showing progress")
 			opts.ShowProgress = true
 		} else if arg == "-v" || arg == "--verbose" {
-			log.Printf("showing progress")
-			opts.ShowProgress = true
-			c := http.NewClient(newVerboseHTTPClient())
-			client.InstallProtocol("https", c)
-			client.InstallProtocol("http", c)
+			rt = newVerboseHTTPClient(rt)
+		} else if arg == "--show-request-id" {
+			rt = newRequestIDTracker(rt)
 		} else if arg == "-r" || arg == "--review-lab" {
 			opts.URL = "https://spraints.review-lab.github.com/spraints/silver-eureka"
 		} else if arg == "-g" || arg == "--garage" {
@@ -53,6 +55,12 @@ func main() {
 		} else {
 			log.Fatalf("illegal arg %q", arg)
 		}
+	}
+
+	if rt != nil {
+		c := http.NewClient(&nethttp.Client{Transport: rt})
+		client.InstallProtocol("https", c)
+		client.InstallProtocol("http", c)
 	}
 
 	log.Printf("pushing to %v", opts.URL)

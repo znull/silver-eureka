@@ -12,14 +12,16 @@ import (
 	"sync/atomic"
 )
 
-func newVerboseHTTPClient() *http.Client {
-	return &http.Client{
-		Transport: &verboseHTTPTransport{},
+func newVerboseHTTPClient(next http.RoundTripper) *verboseHTTPTransport {
+	if next == nil {
+		next = http.DefaultTransport
 	}
+	return &verboseHTTPTransport{next: next}
 }
 
 type verboseHTTPTransport struct {
 	count int32
+	next  http.RoundTripper
 }
 
 func (t *verboseHTTPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -36,7 +38,7 @@ func (t *verboseHTTPTransport) RoundTrip(req *http.Request) (*http.Response, err
 		req.Body = &verboseHTTPBody{tag: tag + "/request", body: req.Body}
 	}
 
-	resp, err := http.DefaultTransport.RoundTrip(req)
+	resp, err := t.next.RoundTrip(req)
 	if err != nil {
 		vPrintf(tag, "error: %v", err)
 		return nil, err
